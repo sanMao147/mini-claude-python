@@ -1,0 +1,9 @@
+# mini-claude-python 项目依赖
+# 安装: pip install -r requirements.txt
+
+# OpenAI 兼容 SDK（用于调用 DeepSeek 等兼容接口）
+# DeepSeek 完全兼容 OpenAI 接口，直接使用 openai 库即可
+openai>=1.0.0
+
+# YAML 解析（用于解析 SKILL.md 的 frontmatter）
+pyyaml>=6.0
