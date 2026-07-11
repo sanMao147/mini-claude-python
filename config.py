@@ -3,7 +3,7 @@
   集中配置文件 — mini-claude-python
 ============================================================================
   所有步骤共用此配置文件。
-  更换 LLM 提供方只需修改 API_KEY / API_URL / MODEL 三个变量。
+  更换 LLM 提供方只需修改项目根目录 .env 中的 API_KEY / API_URL / MODEL。
 
   支持的提供方示例：
     - DeepSeek (默认):  API_URL = "https://api.deepseek.com/v1"
@@ -17,35 +17,39 @@
 import os
 import sys
 
+from dotenv import load_dotenv
+
+# 自动检测项目根目录
+WORKSPACE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+load_dotenv(os.path.join(WORKSPACE_DIR, ".env"), override=False)
+
 # ============================================================================
 #  LLM API 配置
 # ============================================================================
 
-# DeepSeek API Key（在此填入你的 key）
-API_KEY = "sk-your-deepseek-api-key-here"
+# DeepSeek API Key（在项目根目录 .env 中配置）
+API_KEY = os.getenv("API_KEY", "")
 
 # API 端点地址（OpenAI 兼容接口）
-API_URL = "https://api.deepseek.com/v1"
+API_URL = os.getenv("API_URL", "https://api.deepseek.com/v1")
 
 # 模型名称
-MODEL = "deepseek-chat"
+MODEL = os.getenv("MODEL", "deepseek-chat")
 
 # ============================================================================
 #  调用参数
 # ============================================================================
 
 # 每次 LLM 调用的最大输出 token 数
-MAX_TOKENS = 4096
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))
 
 # 采样温度，0.0 表示确定性输出（推荐用于工具调用场景）
-TEMPERATURE = 0.0
+TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
 
 # ============================================================================
 #  工作区配置
 # ============================================================================
-
-# 自动检测项目根目录
-WORKSPACE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 确保各步骤目录可以通过 from config import * 导入本文件
 if WORKSPACE_DIR not in sys.path:

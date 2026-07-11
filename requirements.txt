@@ -5,5 +5,8 @@
 # DeepSeek 完全兼容 OpenAI 接口，直接使用 openai 库即可
 openai>=1.0.0
 
+# 环境变量加载（用于读取项目根目录 .env）
+python-dotenv>=1.0.0
+
 # YAML 解析（用于解析 SKILL.md 的 frontmatter）
 pyyaml>=6.0

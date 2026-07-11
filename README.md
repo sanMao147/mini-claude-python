@@ -13,8 +13,8 @@ cd mini-claude-python
 pip install -r requirements.txt
 
 # 3. 配置 API
-#    编辑 config.py，填入你的 DeepSeek（或其他兼容 OpenAI 接口的）API Key
-#    API_KEY = "sk-your-deepseek-api-key-here"
+#    复制 .env.example 为 .env，并填入你的 DeepSeek（或其他兼容 OpenAI 接口的）API Key
+#    API_KEY=sk-your-deepseek-api-key-here
 
 # 4. 运行某个步骤（以 s01 为例）
 python s01_agent_loop/main.py
@@ -22,21 +22,21 @@ python s01_agent_loop/main.py
 
 ## 更换 LLM 提供方
 
-只需修改 `config.py` 中的三个变量：
+只需修改项目根目录 `.env` 中的三个变量：
 
-```python
+```bash
 # DeepSeek（默认）
-API_KEY = "sk-your-deepseek-key"
-API_URL = "https://api.deepseek.com/v1"
-MODEL = "deepseek-chat"
+API_KEY=sk-your-deepseek-key
+API_URL=https://api.deepseek.com/v1
+MODEL=deepseek-chat
 
 # 切换到 OpenAI
-# API_URL = "https://api.openai.com/v1"
-# MODEL = "gpt-4o"
+# API_URL=https://api.openai.com/v1
+# MODEL=gpt-4o
 
 # 切换到通义千问
-# API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-# MODEL = "qwen-plus"
+# API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+# MODEL=qwen-plus
 ```
 
 ## 学习路线图 (s01 → s20)
@@ -116,7 +116,7 @@ mini-claude-python/
 2. **渐进式** — 每步只新增一个机制，不重写已有代码
 3. **独立运行** — 每个步骤可独立执行：`python sXX_xxx/main.py`
 4. **注释驱动** — 所有代码附带详细中文注释，适合学习
-5. **API 无关** — 通过 config.py 一键切换 LLM 提供方
+5. **API 无关** — 通过 `.env` 一键切换 LLM 提供方
 
 ## 运行方式
 
