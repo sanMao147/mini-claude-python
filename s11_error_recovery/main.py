@@ -1,15 +1,17 @@
-"""s09 main.py — 持久化记忆系统"""
+"""s11 main.py — 错误恢复系统"""
 import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import WORKSPACE_DIR, MEMORY_DIR
+from config import WORKSPACE_DIR
 from llm import call_llm
 from tools import TOOLS, TOOL_HANDLERS
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
-from skills import build_skills_catalog, load_skill
+from skills import load_skill
 from compact import run_compaction_pipeline, run_compact, reactive_compact
 from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
+from prompt import get_system_prompt, update_context
+from recovery import _state, reset_state as reset_recovery
 
 # 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
@@ -19,35 +21,40 @@ TOOL_HANDLERS["compact"] = lambda: run_compact(call_llm)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
 
-_skills_catalog = build_skills_catalog()
-os.makedirs(MEMORY_DIR, exist_ok=True)
-
-def _build_system_prompt(query: str = "") -> str:
-    """动态组装系统提示词，包含相关记忆。"""
-    parts = [f"你是一个编程助手 Agent，工作目录为 {WORKSPACE_DIR}。",
-             "可用工具: bash, read_file, write_file, edit_file, glob, todo_write, task, load_skill, compact"]
-    if _skills_catalog: parts.append(_skills_catalog)
-    # 注入相关记忆
-    if query:
-        mems = select_relevant_memories(query, call_llm)
-        if mems:
-            mem_text = "\n".join(f"- **{m.get('name','')}**: {m.get('description','')}" for m in mems[:5])
-            parts.append(f"\n相关记忆:\n{mem_text}")
-    parts.append("\n规则：先计划再执行。上下文过长时使用 compact 工具。")
-    return "\n".join(parts)
+_all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
+    has_compacted = False  # 是否已执行过 reactive compact
     while True:
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
-        response = call_llm(messages=messages, tools=TOOLS, system_prompt=_build_system_prompt(user_query))
+
+        context = update_context(_all_tool_names, user_query)
+        if context["has_memories"] and user_query:
+            rel_mems = select_relevant_memories(user_query, call_llm)
+            context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
+        system_prompt = get_system_prompt(context)
+
+        # s11: LLM 调用已内置错误恢复
+        response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
+
+        # s11: prompt_too_long → reactive compact 后重试
+        if response.get("error") == "prompt_too_long" and not has_compacted:
+            print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
+            messages = reactive_compact(messages, call_llm)
+            has_compacted = True
+            continue
+
+        if response.get("error") and not response.get("content"):
+            # 不可恢复的错误
+            print(f"\n\033[31m[错误] 不可恢复: {response.get('error')}\033[0m")
+            return
+
         messages.append(response["assistant_message"])
         if response["finish_reason"] != "tool_calls":
-            # s09: 自动提取记忆
             extracted = extract_memories(messages, call_llm)
             if extracted: print(f"\033[90m[记忆] {extracted}\033[0m")
-            # 检查是否需要整理
             all_mems = _scan_memory_dir()
             if len(all_mems) >= 10:
                 result = consolidate_memories(call_llm)
@@ -82,10 +89,11 @@ def agent_loop(messages: list[dict], user_query: str = ""):
 
 def main():
     print("=" * 50)
-    print("  s09: Memory — 持久化记忆系统")
-    print("  存储(.memory/) + LLM选择 + 自动提取 + 去重整理")
+    print("  s11: Error Recovery — 三种错误恢复路径")
+    print("  指数退避重试 + max_tokens升级 + 熔断器")
     print("=" * 50)
     print("输入需求后回车。q / exit 退出。\n")
+    reset_recovery()
     history: list[dict] = []
     while True:
         try: query = input("\033[36m>> \033[0m").strip()
