@@ -1,4 +1,4 @@
-"""s11 main.py — 错误恢复系统"""
+"""s13 main.py — 后台任务执行"""
 import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR
@@ -12,23 +12,40 @@ from compact import run_compaction_pipeline, run_compact, reactive_compact
 from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
 from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
+from tasks import create_task, list_tasks, get_task, claim_task, complete_task
+from background import should_run_background, start_background_task, collect_background_results  # s13
 
 # 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
 TOOL_HANDLERS["compact"] = lambda: run_compact(call_llm)
+TOOL_HANDLERS["create_task"] = lambda subject, description="", blocked_by=None: create_task(subject, description, blocked_by)
+TOOL_HANDLERS["list_tasks"] = lambda status=None: list_tasks(status)
+TOOL_HANDLERS["get_task"] = lambda task_id: get_task(task_id)
+TOOL_HANDLERS["claim_task"] = lambda task_id: claim_task(task_id)
+TOOL_HANDLERS["complete_task"] = lambda task_id: complete_task(task_id)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
+
+# s13: 覆写 bash 处理器以支持后台执行
+_orig_bash = TOOL_HANDLERS["bash"]
+TOOL_HANDLERS["bash"] = lambda command: start_background_task(command) if should_run_background(command) else _orig_bash(command)
 
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
-    has_compacted = False  # 是否已执行过 reactive compact
+    has_compacted = False
     while True:
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
+
+        # s13: 收集后台任务结果并注入到对话
+        bg_notifications = collect_background_results()
+        for bg_msg in bg_notifications:
+            print(f"\033[35m[后台完成]\033[0m {bg_msg[:100]}...")
+            messages.append({"role": "user", "content": bg_msg})
 
         context = update_context(_all_tool_names, user_query)
         if context["has_memories"] and user_query:
