@@ -1,5 +1,5 @@
-"""s11 main.py — 错误恢复系统"""
-import json, os, sys
+"""s14 main.py — Cron 定时调度"""
+import json, os, sys, threading
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR
 from llm import call_llm
@@ -12,14 +12,25 @@ from compact import run_compaction_pipeline, run_compact, reactive_compact
 from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
 from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
+from tasks import create_task, list_tasks, get_task, claim_task, complete_task
+from background import should_run_background, start_background_task, collect_background_results
+from cron import start_cron_scheduler, cron_queue, cron_lock, schedule_job, agent_lock  # s14
 
 # 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
 TOOL_HANDLERS["compact"] = lambda: run_compact(call_llm)
+TOOL_HANDLERS["create_task"] = lambda s, d="", b=None: create_task(s,d,b)
+TOOL_HANDLERS["list_tasks"] = lambda status=None: list_tasks(status)
+TOOL_HANDLERS["get_task"] = lambda tid: get_task(tid)
+TOOL_HANDLERS["claim_task"] = lambda tid: claim_task(tid)
+TOOL_HANDLERS["complete_task"] = lambda tid: complete_task(tid)
+TOOL_HANDLERS["schedule_job"] = lambda cron, prompt, durable=False: schedule_job(cron, prompt, durable)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
+_orig_bash = TOOL_HANDLERS["bash"]
+TOOL_HANDLERS["bash"] = lambda c: start_background_task(c) if should_run_background(c) else _orig_bash(c)
 
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
@@ -29,6 +40,15 @@ def agent_loop(messages: list[dict], user_query: str = ""):
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
+
+        # s14: cron queue 消费 + background results 收集
+        bg_notifications = collect_background_results()
+        for bg_msg in bg_notifications:
+            print(f"\033[35m[后台完成]\033[0m"); messages.append({"role": "user", "content": bg_msg})
+        with cron_lock:
+            while cron_queue:
+                job = cron_queue.pop(0)
+                messages.append({"role": "user", "content": f"<cron_trigger>定时任务 [{job['job_id']}]: {job['prompt']}</cron_trigger>"})
 
         context = update_context(_all_tool_names, user_query)
         if context["has_memories"] and user_query:
@@ -89,11 +109,12 @@ def agent_loop(messages: list[dict], user_query: str = ""):
 
 def main():
     print("=" * 50)
-    print("  s11: Error Recovery — 三种错误恢复路径")
-    print("  指数退避重试 + max_tokens升级 + 熔断器")
+    print("  s14: Cron Scheduler — 定时调度系统")
+    print("  cron_matches五段匹配 + daemon轮询 + Agent空闲交付")
     print("=" * 50)
     print("输入需求后回车。q / exit 退出。\n")
     reset_recovery()
+    start_cron_scheduler()  # s14: 启动 cron 调度器
     history: list[dict] = []
     while True:
         try: query = input("\033[36m>> \033[0m").strip()
