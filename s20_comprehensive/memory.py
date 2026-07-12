@@ -27,13 +27,16 @@ from config import WORKSPACE_DIR, MEMORY_DIR
 
 os.makedirs(MEMORY_DIR, exist_ok=True)
 
-# 记忆索引文件
+# 记忆索引文件。
+# MEMORY.md 只保存目录摘要，真正内容分散在独立 Markdown 文件里。
 MEMORY_INDEX_FILE = os.path.join(MEMORY_DIR, "MEMORY.md")
 
-# 记忆列表缓存
+# 记忆列表缓存。
+# 读多写少场景下避免每轮 prompt 组装都反复扫描 .memory/。
 _memories_cache: list[dict] = []
 
-# 记忆文件数阈值（超过此数触发整理）
+# 记忆文件数阈值（超过此数触发整理）。
+# 文件过多会让选择和 prompt 注入成本变高，所以达到阈值后触发合并。
 CONSOLIDATE_THRESHOLD = 10
 
 
@@ -55,11 +58,13 @@ def write_memory_file(name: str, content: str, mem_type: str = "reference", desc
 
     返回文件路径。
     """
+    # 文件名只保留安全字符，避免记忆名称里带路径分隔符或特殊符号。
     safe_name = re.sub(r'[^\w\-]', '_', name.lower())
     filename = f"{safe_name}.md"
     filepath = os.path.join(MEMORY_DIR, filename)
 
-    # 构建 YAML frontmatter + Markdown 内容
+    # 构建 YAML frontmatter + Markdown 内容。
+    # frontmatter 用于快速扫描摘要，正文保存完整记忆。
     yaml_header = yaml.dump({
         "name": name,
         "description": description,
@@ -70,10 +75,10 @@ def write_memory_file(name: str, content: str, mem_type: str = "reference", desc
 
     Path(filepath).write_text(file_content, encoding="utf-8")
 
-    # 更新索引文件
+    # 更新索引文件，方便人工查看和 system prompt 构建目录。
     _update_memory_index(name, description, mem_type, filename)
 
-    # 清除缓存
+    # 清除缓存，确保下一次读取能看到刚写入的新记忆。
     global _memories_cache
     _memories_cache = []
 
@@ -90,7 +95,7 @@ def _update_memory_index(name: str, description: str, mem_type: str, filename: s
     else:
         lines = ["# Memory Index\n"]
 
-    # 检查是否已有同名条目
+    # 检查是否已有同名条目；同名记忆更新摘要，不额外追加重复索引。
     for i, line in enumerate(lines):
         if f"**{name}**" in line:
             lines[i] = entry
@@ -109,6 +114,7 @@ def _scan_memory_dir() -> list[dict]:
     """扫描 .memory/ 目录，返回所有记忆列表。"""
     global _memories_cache
     if _memories_cache:
+        # 缓存只在写入后清空，因此这里可以直接返回。
         return _memories_cache
 
     memories = []
@@ -123,6 +129,7 @@ def _scan_memory_dir() -> list[dict]:
         try:
             text = Path(filepath).read_text(encoding="utf-8")
             meta = _parse_memory_frontmatter(text)
+            # file 用于后续删除/合并，content 用于 LLM 做相关性选择或整理。
             meta["file"] = entry
             meta["content"] = text
             memories.append(meta)
@@ -136,6 +143,7 @@ def _scan_memory_dir() -> list[dict]:
 def _parse_memory_frontmatter(text: str) -> dict:
     """解析记忆文件的 YAML frontmatter。"""
     if not text.startswith("---"):
+        # 没有 frontmatter 的旧文件按 reference 类型处理。
         return {"name": "unknown", "description": "", "type": "reference"}
     parts = text.split("---", 2)
     if len(parts) < 3:
@@ -162,7 +170,8 @@ def select_relevant_memories(query: str, call_llm_func) -> list[dict]:
     if len(all_memories) <= 5:
         return all_memories
 
-    # 用 LLM 选择相关记忆
+    # 用 LLM 选择相关记忆。
+    # 这里给 LLM 的只是 name/description 列表，不直接塞入完整记忆内容，控制选择成本。
     memory_list = "\n".join(
         f"- {m.get('name','unknown')}: {m.get('description','')}"
         for m in all_memories
@@ -186,7 +195,8 @@ def select_relevant_memories(query: str, call_llm_func) -> list[dict]:
         selected_names = []
 
     if not selected_names:
-        # 降级：关键词匹配
+        # 降级：关键词匹配。
+        # LLM 选择失败时仍尽量给出相关记忆，而不是完全丢弃记忆能力。
         keywords = query.lower().split()
         scored = []
         for m in all_memories:
@@ -195,7 +205,8 @@ def select_relevant_memories(query: str, call_llm_func) -> list[dict]:
         scored.sort(key=lambda x: -x[0])
         selected_names = [m["name"] for _, m in scored[:5]]
 
-    # 按名查找
+    # 按名查找。
+    # 只返回真正命中的条目，避免 LLM 输出不存在名称时污染结果。
     result = []
     for name in selected_names:
         for m in all_memories:
@@ -218,6 +229,7 @@ def extract_memories(messages: list[dict], call_llm_func) -> str | None:
     返回新创建的记忆数量字符串，如未提取则返回 None。
     """
     if len(messages) < 3:
+        # 对话太短时通常没有稳定偏好或项目结论，跳过可减少误提取。
         return None
 
     extract_prompt = (
@@ -234,7 +246,8 @@ def extract_memories(messages: list[dict], call_llm_func) -> str | None:
         {"role": "system", "content": extract_prompt},
     ]
 
-    # 取最近的对话轮次（最后 8 条消息）
+    # 取最近的对话轮次（最后 8 条消息）。
+    # 只抽取最近内容，避免每轮都重新总结很久以前的历史。
     recent = messages[-8:] if len(messages) > 8 else messages
     summary_messages.extend(recent)
 
@@ -247,7 +260,7 @@ def extract_memories(messages: list[dict], call_llm_func) -> str | None:
         if result_text.upper() == "NONE" or not result_text:
             return None
 
-        # 尝试解析 JSON
+        # 尝试解析 JSON；模型输出不合规时直接忽略，避免写入脏记忆。
         memories = json.loads(result_text)
         for mem in memories:
             write_memory_file(
@@ -276,7 +289,8 @@ def consolidate_memories(call_llm_func) -> str | None:
     if len(all_memories) < CONSOLIDATE_THRESHOLD:
         return None
 
-    # 将现有记忆内容合并
+    # 将现有记忆内容合并。
+    # 用分隔线保留每条记忆边界，帮助整理模型识别重复和冲突。
     combined = "\n\n---\n\n".join(
         f"【{m.get('name','unknown')}】({m.get('type','reference')}):\n{m.get('content','')}"
         for m in all_memories
@@ -296,13 +310,14 @@ def consolidate_memories(call_llm_func) -> str | None:
         )
         result_text = response.get("content", "").strip()
 
-        # 清除旧记忆文件
+        # 清除旧记忆文件。
+        # MEMORY.md 是索引文件，不作为独立记忆删除。
         for m in all_memories:
             filepath = os.path.join(MEMORY_DIR, m.get("file", ""))
             if os.path.exists(filepath) and m.get("file", "") != "MEMORY.md":
                 os.remove(filepath)
 
-        # 写入整理后的记忆
+        # 写入整理后的记忆；write_memory_file 会顺便重建索引和清缓存。
         consolidated = json.loads(result_text)
         for mem in consolidated:
             write_memory_file(

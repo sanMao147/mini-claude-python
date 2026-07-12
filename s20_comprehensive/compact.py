@@ -23,11 +23,13 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR, TASK_OUTPUT_DIR
 
-# 连续压缩失败计数器（熔断器）
+# 连续压缩失败计数器（熔断器）。
+# 只有 LLM 摘要类压缩可能失败；普通裁剪是本地确定性操作，不需要计入失败。
 _consecutive_failures = 0
 MAX_FAILURES = 3
 
-# 压缩参数
+# 压缩参数。
+# 这里的数值偏保守：优先保留最新上下文，避免 Agent 丢掉正在执行的任务状态。
 SNIP_HEAD = 3       # snip 保留头部消息数
 SNIP_TAIL = 47      # snip 保留尾部消息数
 MICRO_KEEP = 3      # micro 保留最近 tool_result 数
@@ -37,12 +39,14 @@ BUDGET_LIMIT = 200 * 1024  # 200KB tool_result 总大小阈值
 def reset_failures():
     """重置熔断器计数器。"""
     global _consecutive_failures
+    # 摘要成功或外部明确恢复后调用，允许后续再次尝试 LLM 压缩。
     _consecutive_failures = 0
 
 
 def _circuit_breaker() -> bool:
     """熔断器：连续失败超限返回 True。"""
     global _consecutive_failures
+    # 每次进入 LLM 摘要前先记一次失败风险；真正成功时 compact_history 会清零。
     _consecutive_failures += 1
     if _consecutive_failures >= MAX_FAILURES:
         print(f"\033[31m[压缩熔断] 连续 {MAX_FAILURES} 次压缩失败，停止尝试\033[0m")
@@ -64,11 +68,12 @@ def snip_compact(messages: list[dict]) -> list[dict]:
     if len(messages) <= SNIP_HEAD + SNIP_TAIL:
         return messages
 
+    # head 通常包含系统设定和最早的任务背景；tail 包含最近操作和工具结果。
     head = messages[:SNIP_HEAD]
     tail = messages[-SNIP_TAIL:]
     removed = len(messages) - SNIP_HEAD - SNIP_TAIL
 
-    # 注入裁剪标记
+    # 注入裁剪标记，让模型知道中间历史不是“自然消失”，而是被主动压缩。
     marker = {
         "role": "user",
         "content": f"[上下文裁剪] 已移除中间 {removed} 条消息以节省上下文空间。保留开头 {SNIP_HEAD} 条和结尾 {SNIP_TAIL} 条。",
@@ -87,7 +92,7 @@ def micro_compact(messages: list[dict]) -> list[dict]:
     裁剪 tool_result 内容：只保留最近 MICRO_KEEP 条完整内容。
     更早的 tool 消息替换为占位符。
     """
-    # 从后往前找 tool 消息
+    # 从后往前找 tool 消息：越靠后的工具结果越新，通常越可能影响当前下一步。
     tool_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
     keep_count = 0
     indices_to_truncate = []
@@ -103,6 +108,7 @@ def micro_compact(messages: list[dict]) -> list[dict]:
 
     for idx in indices_to_truncate:
         old_content = messages[idx].get("content", "")
+        # 只替换 content，不删除整条 tool 消息，避免破坏 tool_call_id 等对话结构。
         messages[idx]["content"] = f"[输出已压缩] ({len(old_content)} 字符的旧工具输出被替换为占位符)"
 
     return messages
@@ -121,14 +127,15 @@ def tool_result_budget(messages: list[dict]) -> list[dict]:
     """
     os.makedirs(TASK_OUTPUT_DIR, exist_ok=True)
 
-    # 从后往前找最近的一条 user 消息
+    # 从后往前找最近的一条 user 消息。
+    # 当前实现只处理最近消息，避免扫描整段历史时反复改写旧上下文。
     for i in range(len(messages) - 1, -1, -1):
         m = messages[i]
         if m.get("role") != "user":
             continue
         content = m.get("content", "")
         if isinstance(content, str) and len(content) > BUDGET_LIMIT:
-            # 落盘到文件
+            # 落盘到文件：上下文里只保留引用，完整内容留在工作区供工具按需读取。
             filename = f"tool_result_{int(time.time())}_{hashlib.md5(content[:100].encode()).hexdigest()[:8]}.txt"
             filepath = os.path.join(TASK_OUTPUT_DIR, filename)
             Path(filepath).write_text(content, encoding="utf-8", errors="replace")
@@ -159,7 +166,8 @@ def compact_history(messages: list[dict], call_llm_func) -> list[dict] | None:
     if _circuit_breaker():
         return None
 
-    # 构建压缩提示词
+    # 构建压缩提示词。
+    # 摘要必须保留“约束、已做动作、当前进度、文件修改”，否则压缩后容易跑偏。
     compact_prompt = (
         "请总结以下对话历史的关键信息。保留：\n"
         "1. 用户的需求和约束条件\n"
@@ -170,7 +178,7 @@ def compact_history(messages: list[dict], call_llm_func) -> list[dict] | None:
     )
 
     try:
-        # 用侧查询生成摘要
+        # 用侧查询生成摘要：不直接改原 messages，只有拿到有效 summary 后才替换历史。
         summary_messages = messages + [{"role": "user", "content": compact_prompt}]
         response = call_llm_func(
             messages=summary_messages,
@@ -182,7 +190,8 @@ def compact_history(messages: list[dict], call_llm_func) -> list[dict] | None:
         if not summary:
             return None
 
-        # 用摘要替换历史
+        # 用摘要替换历史。
+        # 摘要作为 user 消息注入，后面再拼最近 5 条，兼顾长期背景和短期上下文。
         abbreviated = [
             {"role": "user", "content": f"[对话摘要]\n{summary}\n\n（以下为最近对话）"},
         ]
@@ -215,11 +224,11 @@ def reactive_compact(messages: list[dict], call_llm_func) -> list[dict] | None:
     """
     print(f"\033[33m[应急压缩] 检测到上下文过长，执行应急压缩...\033[0m")
 
-    # L2 → L1
+    # L2 → L1：先压缩工具大输出，再裁剪消息数量，尽量保留近期对话结构。
     messages = micro_compact(messages)
     messages = snip_compact(messages)
 
-    # L4 尝试 LLM 摘要
+    # L4 尝试 LLM 摘要；如果此时 API 仍然接受请求，摘要质量通常最好。
     result = compact_history(messages, call_llm_func)
     if result:
         return result
@@ -241,7 +250,8 @@ def run_compaction_pipeline(messages: list[dict], call_llm_func) -> list[dict]:
 
     返回压缩后的消息列表。
     """
-    # L3: tool_result 大小预算检查
+    # L3: tool_result 大小预算检查。
+    # 先处理大块输出，可以用最小代价快速降低上下文体积。
     messages = tool_result_budget(messages)
 
     # L1: 消息数量截断

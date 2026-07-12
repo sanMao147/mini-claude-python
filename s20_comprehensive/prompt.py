@@ -22,7 +22,8 @@ from config import WORKSPACE_DIR, MEMORY_DIR
 from skills import build_skills_catalog
 from memory import _scan_memory_dir
 
-# Prompt 段缓存
+# Prompt 段缓存。
+# System Prompt 每轮都可能被请求，缓存可以避免同一上下文下重复拼接字符串。
 _cached_prompt = None
 _cached_context_key = None
 
@@ -32,6 +33,7 @@ _cached_context_key = None
 # ============================================================================
 
 PROMPT_SECTIONS = {
+    # 静态段放在这里，动态段在 assemble_system_prompt() 根据 context 生成。
     "identity": (
         "你是一个编程助手 Agent。\n"
         "你可以使用提供的工具来自主完成任务。"
@@ -63,6 +65,7 @@ def assemble_system_prompt(context: dict) -> str:
       - has_memories: 是否有记忆文件
       - memory_summaries: 相关记忆摘要列表
     """
+    # sections 按顺序拼接；越基础的身份/工作区信息越靠前，规则放在最后强化执行约束。
     sections = []
 
     # 身份
@@ -77,12 +80,12 @@ def assemble_system_prompt(context: dict) -> str:
     if tools:
         sections.append(f"可用工具: {', '.join(tools)}")
 
-    # 技能
+    # 技能：只注入技能目录，不注入完整 SKILL.md，完整内容由 load_skill 按需加载。
     skills = context.get("skills_catalog", "")
     if skills:
         sections.append(skills)
 
-    # 记忆
+    # 记忆：这里只放摘要，避免长期记忆把系统提示词撑得过大。
     if context.get("has_memories"):
         sections.append("以下是与当前任务相关的记忆（请参考但不要盲目遵循）：")
         for mem_summary in context.get("memory_summaries", [])[:5]:
@@ -103,7 +106,8 @@ def get_system_prompt(context: dict) -> str:
     """
     global _cached_prompt, _cached_context_key
 
-    # 确定性序列化做缓存 key
+    # 确定性序列化做缓存 key。
+    # sort_keys=True 确保同一内容的 dict 不会因为键顺序不同导致缓存失效。
     context_key = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
 
     if _cached_prompt is not None and context_key == _cached_context_key:
@@ -120,6 +124,7 @@ def update_context(tool_names: list[str], user_query: str = "") -> dict:
 
     返回 context dict，供 assemble_system_prompt 使用。
     """
+    # context 是 prompt 的唯一输入，后续想增加动态信息时优先扩展这个结构。
     context = {
         "workspace": WORKSPACE_DIR,
         "tool_names": tool_names,
@@ -129,13 +134,15 @@ def update_context(tool_names: list[str], user_query: str = "") -> dict:
         "memory_summaries": [],
     }
 
-    # 检查技能目录
+    # 检查技能目录。
+    # build_skills_catalog() 内部会扫描 skills/，并顺便刷新技能注册表。
     catalog = build_skills_catalog()
     if catalog:
         context["has_skills"] = True
         context["skills_catalog"] = catalog
 
-    # 检查记忆文件
+    # 检查记忆文件。
+    # 这里只做轻量扫描；更精确的相关性选择由 main.py 调 select_relevant_memories() 完成。
     if os.path.isdir(MEMORY_DIR):
         mem_files = [f for f in os.listdir(MEMORY_DIR) if f.endswith('.md') and f != "MEMORY.md"]
         if mem_files:
