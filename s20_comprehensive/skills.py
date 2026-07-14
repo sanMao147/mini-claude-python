@@ -25,10 +25,9 @@
 ============================================================================
 """
 
-import os, sys, yaml
+import os, yaml
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR
 
 # 技能文件目录。

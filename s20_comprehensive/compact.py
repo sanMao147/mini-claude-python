@@ -18,9 +18,8 @@
 ============================================================================
 """
 
-import os, sys, json, hashlib, time
+import os, json, hashlib, time
 from pathlib import Path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR, TASK_OUTPUT_DIR
 
 # 连续压缩失败计数器（熔断器）。

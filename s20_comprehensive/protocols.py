@@ -1,8 +1,5 @@
-"""s16 protocols.py — 团队结构化协议"""
+"""s20 protocols.py — 团队结构化协议"""
 import json, os, time, uuid
-sys_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import sys; sys.path.insert(0, sys_path)
-
 # protocols.py 用来描述“团队协作消息”的结构化协议。
 # 当前实现偏模拟：保存请求状态、根据消息 type 分发、把 response 匹配回 request。
 

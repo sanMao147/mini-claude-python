@@ -17,10 +17,9 @@
 ============================================================================
 """
 
-import os, sys, json, uuid
+import os, json, uuid
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import TASKS_DIR
 
 os.makedirs(TASKS_DIR, exist_ok=True)

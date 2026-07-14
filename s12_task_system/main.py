@@ -1,6 +1,9 @@
 """s12 main.py — 持久化任务系统 + DAG 依赖图"""
 import json, os, sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 from config import WORKSPACE_DIR
 from llm import call_llm
 from tools import TOOLS, TOOL_HANDLERS

@@ -20,9 +20,8 @@
 ============================================================================
 """
 
-import os, sys, json, yaml, re
+import os, json, yaml, re
 from pathlib import Path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR, MEMORY_DIR
 
 os.makedirs(MEMORY_DIR, exist_ok=True)

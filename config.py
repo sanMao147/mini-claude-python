@@ -1,8 +1,16 @@
 """
 ============================================================================
-  集中配置文件 — mini-claude-python
+  集中配置文件 — mini-claude-python（唯一入口）
 ============================================================================
-  所有步骤共用此配置文件。
+  本模块是整个项目的唯一配置加载入口，在被首次 import 时自动完成：
+
+    1. 计算项目根目录 WORKSPACE_DIR
+    2. 加载项目根目录 .env 文件（通过 python-dotenv）
+    3. 将项目根目录注入 sys.path（使所有步骤可 from config import）
+
+  所有其他模块无需再手动操作 sys.path 或调用 load_dotenv，
+  只需 import config 即可保证 .env 已可靠加载且路径已就绪。
+
   更换 LLM 提供方只需修改项目根目录 .env 中的 API_KEY / API_URL / MODEL。
 
   支持的提供方示例：
@@ -19,9 +27,16 @@ import sys
 
 from dotenv import load_dotenv
 
-# 自动检测项目根目录
+# ── 唯一入口：项目根目录计算 + .env 加载 + sys.path 注入（幂等） ──
+
+# 自动检测项目根目录（即本文件所在目录）
 WORKSPACE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# 确保项目根目录在 sys.path 中，使 from config import 在任何模块都可用
+if WORKSPACE_DIR not in sys.path:
+    sys.path.insert(0, WORKSPACE_DIR)
+
+# 加载 .env 文件（override=False 表示不覆盖已有的系统环境变量）
 load_dotenv(os.path.join(WORKSPACE_DIR, ".env"), override=False)
 
 # ============================================================================
@@ -46,14 +61,6 @@ MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4096"))
 
 # 采样温度，0.0 表示确定性输出（推荐用于工具调用场景）
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.0"))
-
-# ============================================================================
-#  工作区配置
-# ============================================================================
-
-# 确保各步骤目录可以通过 from config import * 导入本文件
-if WORKSPACE_DIR not in sys.path:
-    sys.path.insert(0, WORKSPACE_DIR)
 
 # ============================================================================
 #  安全配置

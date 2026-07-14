@@ -1,6 +1,9 @@
-"""s14 main.py — Cron 定时调度"""
+"""s20 main.py — Comprehensive 综合集成"""
 import json, os, sys, threading
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 from config import WORKSPACE_DIR
 from llm import call_llm
 from tools import TOOLS, TOOL_HANDLERS
@@ -14,7 +17,7 @@ from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
 from tasks import create_task, list_tasks, get_task, claim_task, complete_task
 from background import should_run_background, start_background_task, collect_background_results
-from cron import start_cron_scheduler, cron_queue, cron_lock, schedule_job, agent_lock  # s14
+from cron import start_cron_scheduler, cron_queue, cron_lock, schedule_job, agent_lock
 
 # 注入动态处理函数。
 # tools.py 只声明工具 schema 和基础 handler；依赖运行时对象的工具在这里绑定。
@@ -48,7 +51,7 @@ def agent_loop(messages: list[dict], user_query: str = ""):
         # 每次调用 LLM 前都跑压缩管线，优先在本地降低上下文体积。
         messages = run_compaction_pipeline(messages, call_llm)
 
-        # s14: cron queue 消费 + background results 收集
+        # cron queue 消费 + background results 收集
         bg_notifications = collect_background_results()
         for bg_msg in bg_notifications:
             print(f"\033[35m[后台完成]\033[0m"); messages.append({"role": "user", "content": bg_msg})
@@ -66,10 +69,10 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
         system_prompt = get_system_prompt(context)
 
-        # s11: LLM 调用已内置错误恢复
+        # LLM 调用已内置错误恢复
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
 
-        # s11: prompt_too_long → reactive compact 后重试
+        # prompt_too_long → reactive compact 后重试
         if response.get("error") == "prompt_too_long" and not has_compacted:
             print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
             messages = reactive_compact(messages, call_llm)
@@ -92,7 +95,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
                 if result: print(f"\033[90m[记忆] {result}\033[0m")
             force_continue = trigger_hooks("Stop", messages)
             if force_continue: messages.append({"role": "user", "content": str(force_continue)}); continue
-            text = response["content"]
             text = response["content"]
             if text.strip(): print(f"\n{text}")
             return
@@ -125,12 +127,12 @@ def agent_loop(messages: list[dict], user_query: str = ""):
 def main():
     """命令行入口：启动调度器，持续读取用户输入，并复用同一段 history。"""
     print("=" * 50)
-    print("  s14: Cron Scheduler — 定时调度系统")
-    print("  cron_matches五段匹配 + daemon轮询 + Agent空闲交付")
+    print("  s20: Comprehensive — 完整集成")
+    print("  全部 19 个步骤的功能整合版")
     print("=" * 50)
     print("输入需求后回车。q / exit 退出。\n")
     reset_recovery()
-    start_cron_scheduler()  # s14: 启动 cron 调度器
+    start_cron_scheduler()
     history: list[dict] = []
     while True:
         # 简化版 REPL：每次用户输入追加到同一 history，agent_loop 负责直到本轮完成。

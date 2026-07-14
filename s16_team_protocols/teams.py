@@ -1,7 +1,6 @@
 """s16 teams.py — Agent 团队 + 协议 + idle loop"""
-import threading, json, os, sys, uuid, time
+import threading, json, os, uuid, time
 from pathlib import Path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import WORKSPACE_DIR, MAILBOXES_DIR
 from llm import call_llm
 from protocols import ProtocolState, dispatch_message
