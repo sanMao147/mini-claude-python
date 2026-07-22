@@ -25,12 +25,10 @@
 ============================================================================
 """
 
-import os, yaml
+import yaml
 from pathlib import Path
 
 from config import WORKSPACE_DIR
-
-# 技能文件目录
 SKILLS_DIR = Path(WORKSPACE_DIR) / "skills"
 
 # 技能注册表：{name: {name, description, path, content}}

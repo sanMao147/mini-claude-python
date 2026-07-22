@@ -1,33 +1,15 @@
-"""
-============================================================================
-  s05_todo_write/main.py — TodoWrite 计划追踪
-============================================================================
-  核心改进（相比 s04）：
-  1. 新增 todo_write 工具：制定计划 + 追踪进度
-  2. Nag reminder：连续 3 轮不更新任务列表，自动注入提醒
-  3. System prompt 中加入"先计划再执行"引导
+"""s05 TodoWrite — 先计划再执行 + Nag 提醒（连续 3 轮不更新则注入提醒）"""
 
-  运行方式：
-      python s05_todo_write/main.py
-============================================================================
-"""
+import json
 
-import json, os, sys
-
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import (
     run_todo_write, check_nag_reminder,
     increment_todo_counter, reset_todo_counter,
 )
 
-# 将 todos.py 中的 run_todo_write 注入 TOOL_HANDLERS
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 
 SYSTEM_PROMPT = (
@@ -40,16 +22,12 @@ SYSTEM_PROMPT = (
 
 
 def agent_loop(messages: list[dict]):
-    """Agent 主循环 — 加入 nag reminder 机制。"""
     while True:
-        # ── s05: Nag Reminder ──
-        # 如果 Agent 连续 3 轮没有更新任务列表，注入提醒
         nag = check_nag_reminder()
         if nag:
             print(f"\033[33m{nag}\033[0m")
             messages.append({"role": "user", "content": nag})
 
-        # ── 调用 LLM ──
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=SYSTEM_PROMPT)
         messages.append(response["assistant_message"])
 
@@ -59,10 +37,10 @@ def agent_loop(messages: list[dict]):
                 messages.append({"role": "user", "content": str(force_continue)})
                 continue
             text = response["content"]
-            if text.strip(): print(f"\n{text}")
+            if text.strip():
+                print(f"\n{text}")
             return
 
-        # 每轮 LLM 调用后增加计数器
         increment_todo_counter()
 
         for tc in response["tool_calls"]:
@@ -96,13 +74,14 @@ def agent_loop(messages: list[dict]):
 
                 trigger_hooks("PostToolUse", tool_name, tool_args, output)
 
-                # s05: 调用 todo_write 时重置计数器
                 if tool_name == "todo_write":
                     reset_todo_counter()
 
             preview = output[:300]
-            if len(output) > 300: preview += "..."
-            if preview.strip(): print(preview)
+            if len(output) > 300:
+                preview += "..."
+            if preview.strip():
+                print(preview)
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": output})
 
 
@@ -118,9 +97,11 @@ def main():
         try:
             query = input("\033[36m>> \033[0m").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n再见！"); break
+            print("\n再见！")
+            break
         if query.lower() in ("q", "exit", ""):
-            print("再见！"); break
+            print("再见！")
+            break
         trigger_hooks("UserPromptSubmit", query)
         history.append({"role": "user", "content": query})
         agent_loop(history)

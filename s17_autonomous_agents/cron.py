@@ -14,7 +14,7 @@
 """
 
 import threading, time, json, os
-from config import SCHEDULED_TASKS_FILE
+from tools import SCHEDULED_TASKS_FILE
 
 # 调度队列
 cron_queue: list[dict] = []

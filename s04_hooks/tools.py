@@ -1,12 +1,10 @@
-"""
-============================================================================
-  s04_hooks/tools.py — 工具定义与执行（与 s03 相同，5 个工具）
-============================================================================
-"""
+"""工具定义与执行（5 个工具，与 s03 相同）"""
 
-import os, subprocess, glob as glob_module
+import subprocess
+import glob as glob_module
 from pathlib import Path
-from config import WORKSPACE_DIR, DANGEROUS_COMMANDS, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+
 
 def safe_path(relative_path: str) -> Path:
     absolute = (Path(WORKSPACE_DIR) / relative_path).resolve()
@@ -14,13 +12,15 @@ def safe_path(relative_path: str) -> Path:
         raise ValueError(f"路径越界！拒绝访问工作区外的路径: {relative_path}")
     return absolute
 
+
 def run_bash(command: str) -> str:
     try:
         result = subprocess.run(command, shell=True, cwd=WORKSPACE_DIR,
                                 capture_output=True, text=True, encoding="utf-8",
                                 errors="replace", timeout=120)
         output = (result.stdout + result.stderr).strip()
-        if not output: return "(无输出)"
+        if not output:
+            return "(无输出)"
         if len(output) > MAX_TOOL_OUTPUT:
             output = output[:MAX_TOOL_OUTPUT] + "\n\n... (输出被截断)"
         return output
@@ -28,6 +28,7 @@ def run_bash(command: str) -> str:
         return "错误: 命令执行超时 (120 秒)"
     except Exception as e:
         return f"错误: {e}"
+
 
 def run_read_file(path: str, limit: int | None = None) -> str:
     try:
@@ -39,9 +40,13 @@ def run_read_file(path: str, limit: int | None = None) -> str:
         if limit and limit < len(lines):
             lines = lines[:limit] + [f"... (剩余 {len(lines) - limit} 行)"]
         return "\n".join(lines)
-    except ValueError as e: return f"错误: 路径校验失败 - {e}"
-    except FileNotFoundError: return f"错误: 文件不存在 - {path}"
-    except Exception as e: return f"错误: {e}"
+    except ValueError as e:
+        return f"错误: 路径校验失败 - {e}"
+    except FileNotFoundError:
+        return f"错误: 文件不存在 - {path}"
+    except Exception as e:
+        return f"错误: {e}"
+
 
 def run_write_file(path: str, content: str) -> str:
     try:
@@ -49,8 +54,11 @@ def run_write_file(path: str, content: str) -> str:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding="utf-8")
         return f"已写入 {len(content)} 字节到 {path}"
-    except ValueError as e: return f"错误: 路径校验失败 - {e}"
-    except Exception as e: return f"错误: {e}"
+    except ValueError as e:
+        return f"错误: 路径校验失败 - {e}"
+    except Exception as e:
+        return f"错误: {e}"
+
 
 def run_edit_file(path: str, old_text: str, new_text: str) -> str:
     try:
@@ -60,9 +68,13 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
             return f"错误: 在 {path} 中未找到指定文本"
         file_path.write_text(text.replace(old_text, new_text, 1), encoding="utf-8")
         return f"已编辑 {path}（替换了 1 处）"
-    except ValueError as e: return f"错误: 路径校验失败 - {e}"
-    except FileNotFoundError: return f"错误: 文件不存在 - {path}"
-    except Exception as e: return f"错误: {e}"
+    except ValueError as e:
+        return f"错误: 路径校验失败 - {e}"
+    except FileNotFoundError:
+        return f"错误: 文件不存在 - {path}"
+    except Exception as e:
+        return f"错误: {e}"
+
 
 def run_glob(pattern: str) -> str:
     try:
@@ -71,7 +83,9 @@ def run_glob(pattern: str) -> str:
             if (Path(WORKSPACE_DIR) / match).resolve().is_relative_to(WORKSPACE_DIR):
                 matches.append(match)
         return "\n".join(matches) if matches else "(无匹配)"
-    except Exception as e: return f"错误: {e}"
+    except Exception as e:
+        return f"错误: {e}"
+
 
 TOOLS = [
     {"type": "function", "function": {"name": "bash", "description": "执行 shell 命令。",

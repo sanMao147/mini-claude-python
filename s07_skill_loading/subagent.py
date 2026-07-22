@@ -1,31 +1,10 @@
-"""
-============================================================================
-  s06_subagent/subagent.py — 子 Agent 系统
-============================================================================
-  s06 的核心新增模块。
-
-  设计理念：大任务拆成小任务，每个子 Agent 拥有全新的 messages[]，
-  中间过程全部丢弃，只回传最终文本摘要。
-
-  子 Agent 的限制：
-    - 无 task 工具（禁止递归创建子子 Agent）
-    - 最多 30 轮安全限制
-    - 工具调用也走 PreToolUse hook（权限不跳过）
-
-  核心函数：spawn_subagent(prompt, cwd=None) -> str
-============================================================================
-"""
+"""s07 子 Agent 系统 — 大任务拆小，独立上下文"""
 
 import json, os
 
 from config import WORKSPACE_DIR
 from llm import call_llm
 from hooks import trigger_hooks
-
-
-# ============================================================================
-# 子 Agent 专用工具集（无 task 工具，禁止递归）
-# ============================================================================
 
 # 子 Agent 的系统提示词 — 强调"完成即返回摘要，不要委派"
 SUB_SYSTEM_PROMPT = (
@@ -49,34 +28,19 @@ SUB_TOOLS = [
         "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]}}},
 ]
 
-# 子 Agent 工具处理函数（从 tools 模块导入）
-SUB_HANDLERS = {}  # 将在 main.py 中从 tools.TOOL_HANDLERS 复制基础 5 个工具
+# 由 main.py 从 tools.TOOL_HANDLERS 复制基础 5 个工具进来
+SUB_HANDLERS = {}
 
-
-# ============================================================================
-# 子 Agent 执行函数
-# ============================================================================
 
 def spawn_subagent(prompt: str, cwd: str | None = None) -> str:
-    """
-    创建一个子 Agent，在全新上下文中执行指定任务。
+    """创建子 Agent，在隔离上下文中执行任务并返回文本摘要。
 
-    参数：
-      prompt: 给子 Agent 的任务描述
-      cwd:    子 Agent 的工作目录（None 表示使用默认工作区）
-
-    返回：
-      子 Agent 的最终文本摘要
-      （所有中间工具调用和内部对话都被丢弃，不污染主 Agent 上下文）
-
-    安全限制：
-      - 最多 30 轮对话（防止无限循环）
-      - 无 task 工具（无法再创建子 Agent）
+    安全限制：最多 30 轮（防无限循环），无 task 工具（禁止递归）。
     """
     work_dir = cwd or WORKSPACE_DIR
     print(f"\033[35m[子 Agent 启动] {prompt[:80]}...\033[0m")
 
-    # ── 子 Agent 拥有全新的 messages 列表（上下文隔离） ──
+    # 子 Agent 拥有全新的 messages 列表（上下文隔离）
     sub_messages = [
         {"role": "user", "content": prompt},
     ]
@@ -84,7 +48,6 @@ def spawn_subagent(prompt: str, cwd: str | None = None) -> str:
     MAX_SUB_TURNS = 30  # 安全限制：最多 30 轮
 
     for turn in range(MAX_SUB_TURNS):
-        # 调用 LLM
         response = call_llm(
             messages=sub_messages,
             tools=SUB_TOOLS,
@@ -92,13 +55,11 @@ def spawn_subagent(prompt: str, cwd: str | None = None) -> str:
         )
         sub_messages.append(response["assistant_message"])
 
-        # ── 模型完成（不再调用工具）→ 返回最终文本 ──
         if response["finish_reason"] != "tool_calls":
             result = response["content"]
             print(f"\033[35m[子 Agent 完成] {turn+1} 轮, 输出 {len(result)} 字符\033[0m")
             return result
 
-        # ── 执行工具调用 ──
         for tc in response["tool_calls"]:
             func = tc["function"]
             tool_name = func["name"]
@@ -108,7 +69,7 @@ def spawn_subagent(prompt: str, cwd: str | None = None) -> str:
             except json.JSONDecodeError:
                 tool_args = {}
 
-            # 子 Agent 的工具调用也走 PreToolUse hook（权限不跳过）
+            # 子 Agent 工具调用也走 PreToolUse hook（权限不跳过）
             blocked = trigger_hooks("PreToolUse", tool_name, tool_args)
             if blocked:
                 output = str(blocked)
@@ -122,13 +83,11 @@ def spawn_subagent(prompt: str, cwd: str | None = None) -> str:
                 else:
                     output = f"错误: 子 Agent 不支持工具 '{tool_name}'"
 
-            # 注入工具结果
             sub_messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
                 "content": output,
             })
 
-    # 达到最大轮数限制
     print(f"\033[35m[子 Agent 超时] 达到 {MAX_SUB_TURNS} 轮限制\033[0m")
     return f"子 Agent 达到最大轮数限制 ({MAX_SUB_TURNS})，未能完成任务。"

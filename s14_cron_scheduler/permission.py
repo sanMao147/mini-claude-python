@@ -1,6 +1,12 @@
 """s07 permission.py — 权限检查辅助函数"""
 from pathlib import Path
-from config import WORKSPACE_DIR, DANGEROUS_COMMANDS
+
+from config import WORKSPACE_DIR
+DANGEROUS_COMMANDS = [
+    "rm -rf /", "rm -rf /*", "rm -rf ~", "rm -rf .",
+    "mkfs.", "dd if=", ":(){ :|:& };:",
+    "chmod -R 777 /", "> /dev/sda", "shutdown", "reboot",
+]
 def check_deny_list(c):  return next((f"危险命令被阻止: '{p}'" for p in DANGEROUS_COMMANDS if p.lower() in c.lower()), None)
 def is_destructive_bash(c): return any(k in c.lower() for k in ["rm ","> /etc/","chmod 777","chown","passwd"])
 def is_outside_workspace(p):

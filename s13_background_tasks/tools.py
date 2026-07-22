@@ -1,7 +1,9 @@
 """s08 tools.py — 9 个工具（新增 compact 工具）"""
-import os, subprocess, glob as glob_module
+import subprocess, glob as glob_module
 from pathlib import Path
-from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+
+from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE, DANGEROUS_COMMANDS
+
 def safe_path(p):
     absolute = (Path(WORKSPACE_DIR) / p).resolve()
     if not absolute.is_relative_to(WORKSPACE_DIR): raise ValueError(f"路径越界！{p}")
@@ -64,8 +66,7 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}, "cwd": {"type": "string"}}, "required": ["prompt"]}}},
     {"type": "function", "function": {"name": "load_skill", "description": "加载技能完整说明。",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
-    # ── s08 新增: compact ──
-    {"type": "function", "function": {"name": "compact", "description": "压缩对话上下文，释放上下文空间。当对话历史过长导致问题时可调用此工具。",
+    {"type": "function", "function": {"name": "compact", "description": "压缩对话上下文，释放上下文空间。",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
 ]
 

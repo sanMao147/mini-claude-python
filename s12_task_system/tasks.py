@@ -20,8 +20,8 @@
 import os, json, uuid
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
-from config import TASKS_DIR
 
+from config import TASKS_DIR
 os.makedirs(TASKS_DIR, exist_ok=True)
 
 

@@ -1,4 +1,4 @@
-"""s06 todos.py — TodoWrite 计划追踪"""
+"""s08 todos.py — TodoWrite 计划追踪"""
 import json, ast
 CURRENT_TODOS: list[dict] = []
 rounds_since_todo = 0

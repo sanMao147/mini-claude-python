@@ -1,11 +1,8 @@
-"""
-============================================================================
-  s06_subagent/tools.py — 7 个工具（新增 task 子代理工具）
-============================================================================
-"""
+"""s06 工具定义 — 7 个工具（含 task 子代理）"""
 
-import os, subprocess, glob as glob_module
+import subprocess, glob as glob_module
 from pathlib import Path
+
 from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
 
 def safe_path(p: str) -> Path:
@@ -79,7 +76,6 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {"todos": {"type": "array", "items": {"type": "object",
             "properties": {"content": {"type": "string"}, "status": {"type": "string", "enum": ["pending","in_progress","completed"]}},
             "required": ["content","status"]}}}, "required": ["todos"]}}},
-    # ── s06 新增: task 工具 ──
     {"type": "function", "function": {"name": "task", "description": (
         "将复杂子任务委托给子 Agent 执行。子 Agent 拥有独立的上下文，完成后返回摘要。"
         "适用于：代码审查、独立模块开发、复杂搜索等可被隔离的任务。"),
@@ -95,6 +91,6 @@ TOOL_HANDLERS = {
     "write_file": lambda path, content: run_write_file(path, content),
     "edit_file": lambda path, old_text, new_text: run_edit_file(path, old_text, new_text),
     "glob": lambda pattern: run_glob(pattern),
-    "todo_write": None,  # 由 todos 模块动态注入
-    "task": None,         # 由 subagent 模块动态注入
+    "todo_write": None,
+    "task": None,
 }

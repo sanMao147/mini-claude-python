@@ -1,19 +1,15 @@
 """s08 main.py — 四层上下文压缩管线"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
-from config import WORKSPACE_DIR
+import json
+
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
 from skills import build_skills_catalog, load_skill
 from compact import run_compaction_pipeline, run_compact, reactive_compact, reset_failures
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -35,7 +31,6 @@ def agent_loop(messages: list[dict]):
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
 
-        # ── s08: 在 LLM 调用前执行压缩管线 ──
         if not history_compacted:
             messages = run_compaction_pipeline(messages, call_llm)
 

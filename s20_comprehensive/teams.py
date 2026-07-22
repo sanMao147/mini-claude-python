@@ -1,7 +1,7 @@
 """s17 teams.py — 自主 Agent（WORK→IDLE→SHUTDOWN 生命周期 + 扫描任务板）"""
 import threading, json, os, uuid, time
 from pathlib import Path
-from config import WORKSPACE_DIR, MAILBOXES_DIR, TASKS_DIR
+from tools import WORKSPACE_DIR, MAILBOXES_DIR, TASKS_DIR
 from llm import call_llm
 from protocols import ProtocolState
 os.makedirs(MAILBOXES_DIR, exist_ok=True)

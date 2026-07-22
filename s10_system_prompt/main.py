@@ -1,21 +1,17 @@
 """s10 main.py — 运行时 System Prompt 组装"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
-from config import WORKSPACE_DIR
+import json, os
+
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
 from skills import load_skill
 from compact import run_compaction_pipeline, run_compact
 from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
-from prompt import get_system_prompt, update_context  # s10: 替代硬编码 SYSTEM
+from prompt import get_system_prompt, update_context
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -23,7 +19,6 @@ TOOL_HANDLERS["compact"] = lambda: run_compact(call_llm)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
 
-# 从工具定义中提取工具名列表
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
@@ -32,9 +27,7 @@ def agent_loop(messages: list[dict], user_query: str = ""):
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
 
-        # s10: 运行时组装 System Prompt
         context = update_context(_all_tool_names, user_query)
-        # 注入相关记忆摘要
         if context["has_memories"] and user_query:
             rel_mems = select_relevant_memories(user_query, call_llm)
             context["memory_summaries"] = [

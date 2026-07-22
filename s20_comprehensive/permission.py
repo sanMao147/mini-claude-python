@@ -1,6 +1,6 @@
 """s07 permission.py — 权限检查辅助函数"""
 from pathlib import Path
-from config import WORKSPACE_DIR, DANGEROUS_COMMANDS
+from tools import WORKSPACE_DIR, DANGEROUS_COMMANDS
 
 # permission.py 只做“判断”，不负责和用户交互。
 # 交互确认逻辑放在 hooks.py，这样底层判断函数可以被其他模块复用。

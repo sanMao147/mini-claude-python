@@ -1,12 +1,8 @@
 """s18 main.py — Worktree Isolation 工作树隔离"""
-import json, os, sys, threading
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+import json, os, threading
 
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
@@ -19,7 +15,6 @@ from tasks import create_task, list_tasks, get_task, claim_task, complete_task
 from background import should_run_background, start_background_task, collect_background_results
 from cron import start_cron_scheduler, cron_queue, cron_lock, schedule_job, agent_lock
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -38,13 +33,12 @@ TOOL_HANDLERS["bash"] = lambda c: start_background_task(c) if should_run_backgro
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
-    has_compacted = False  # 是否已执行过 reactive compact
+    has_compacted = False
     while True:
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
 
-        # cron queue 消费 + background results 收集
         bg_notifications = collect_background_results()
         for bg_msg in bg_notifications:
             print(f"\033[35m[后台完成]\033[0m"); messages.append({"role": "user", "content": bg_msg})
@@ -59,10 +53,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
         system_prompt = get_system_prompt(context)
 
-        # LLM 调用已内置错误恢复
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
 
-        # prompt_too_long → reactive compact 后重试
         if response.get("error") == "prompt_too_long" and not has_compacted:
             print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
             messages = reactive_compact(messages, call_llm)
@@ -70,7 +62,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             continue
 
         if response.get("error") and not response.get("content"):
-            # 不可恢复的错误
             print(f"\n\033[31m[错误] 不可恢复: {response.get('error')}\033[0m")
             return
 

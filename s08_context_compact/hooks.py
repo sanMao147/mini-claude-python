@@ -1,4 +1,4 @@
-"""s06 hooks.py — Hook 系统"""
+"""s08 hooks.py — Hook 系统"""
 from config import WORKSPACE_DIR
 from permission import check_deny_list, is_destructive_bash, is_outside_workspace
 HOOKS = {"UserPromptSubmit": [], "PreToolUse": [], "PostToolUse": [], "Stop": []}

@@ -1,31 +1,10 @@
-"""
-============================================================================
-  s03_permission/main.py — 权限管控（三道闸门管线）
-============================================================================
-  核心改进（相比 s02）：
-  s03 在工具执行前插入三道安全闸门：
+"""s03 权限管控 — 三道闸门管线（拒绝列表 / 规则匹配 / 用户审批）"""
 
-    工具调用 → Gate1(拒绝列表) → Gate2(规则匹配) → Gate3(用户审批) → 执行
+import json
 
-  循环中只加了一行：
-      if not check_permission(tool_name, tool_args):
-          ...  # 拒绝，跳过执行
-
-  运行方式：
-      python s03_permission/main.py
-============================================================================
-"""
-
-import json, os, sys
-
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
-from permission import check_permission  # <-- s03 新增
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
+from permission import check_permission
 
 SYSTEM_PROMPT = (
     f"你是一个编程助手 Agent，工作目录为 {WORKSPACE_DIR}。\n"
@@ -35,7 +14,6 @@ SYSTEM_PROMPT = (
 
 
 def agent_loop(messages: list[dict]):
-    """Agent 主循环 — 在工具执行前插入权限检查。"""
     while True:
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=SYSTEM_PROMPT)
         messages.append(response["assistant_message"])
@@ -55,7 +33,6 @@ def agent_loop(messages: list[dict]):
             except json.JSONDecodeError:
                 tool_args = {}
 
-            # 打印工具调用信息
             label = {"bash": f"$ {tool_args.get('command','')}",
                      "read_file": f"[read] {tool_args.get('path','')}",
                      "write_file": f"[write] {tool_args.get('path','')}",
@@ -63,8 +40,6 @@ def agent_loop(messages: list[dict]):
                      "glob": f"[glob] {tool_args.get('pattern','')}"}
             print(f"\033[36m> {label.get(tool_name, tool_name)}\033[0m")
 
-            # ── s03 核心：权限检查 ──
-            # 在工具执行前运行三道闸门管线，拒绝则跳过执行
             if not check_permission(tool_name, tool_args):
                 output = "权限被拒绝。"
             else:

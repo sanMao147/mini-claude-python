@@ -1,11 +1,4 @@
-"""
-============================================================================
-  s02_tool_use/llm.py — LLM API 调用封装
-============================================================================
-  与 s01 完全相同的实现。详见 s01_agent_loop/llm.py 的注释。
-  封装 OpenAI 兼容接口（DeepSeek 默认），统一处理请求和响应解析。
-============================================================================
-"""
+"""LLM API 调用封装"""
 
 from openai import OpenAI
 from config import API_KEY, API_URL, MODEL, MAX_TOKENS, TEMPERATURE
@@ -19,7 +12,6 @@ def call_llm(
     system_prompt: str = "",
     max_tokens: int = MAX_TOKENS,
 ) -> dict:
-    """调用 LLM API，返回统一格式的响应。"""
     full_messages = []
     if system_prompt:
         full_messages.append({"role": "system", "content": system_prompt})

@@ -1,16 +1,10 @@
-"""
-============================================================================
-  s03_permission/tools.py — 工具定义与执行（5 个工具，与 s02 相同）
-============================================================================
-  本文件与 s02_tool_use/tools.py 完全一致。
-  包含：bash, read_file, write_file, edit_file, glob 五个工具。
-  包含：safe_path() 路径安全校验。
-============================================================================
-"""
+"""工具定义与执行（5 个工具，与 s02 相同）"""
 
-import os, subprocess, glob as glob_module
+import subprocess
+import glob as glob_module
 from pathlib import Path
-from config import WORKSPACE_DIR, DANGEROUS_COMMANDS, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+
 
 def safe_path(relative_path: str) -> Path:
     absolute = (Path(WORKSPACE_DIR) / relative_path).resolve()
@@ -18,8 +12,8 @@ def safe_path(relative_path: str) -> Path:
         raise ValueError(f"路径越界！拒绝访问工作区外的路径: {relative_path}")
     return absolute
 
+
 def run_bash(command: str) -> str:
-    # 注意：危险命令的硬拒绝现在由 permission.py 的 Gate 1 处理
     try:
         result = subprocess.run(command, shell=True, cwd=WORKSPACE_DIR,
                                 capture_output=True, text=True, encoding="utf-8",
@@ -34,6 +28,7 @@ def run_bash(command: str) -> str:
         return "错误: 命令执行超时 (120 秒)"
     except Exception as e:
         return f"错误: {e}"
+
 
 def run_read_file(path: str, limit: int | None = None) -> str:
     try:
@@ -52,6 +47,7 @@ def run_read_file(path: str, limit: int | None = None) -> str:
     except Exception as e:
         return f"错误: {e}"
 
+
 def run_write_file(path: str, content: str) -> str:
     try:
         file_path = safe_path(path)
@@ -62,6 +58,7 @@ def run_write_file(path: str, content: str) -> str:
         return f"错误: 路径校验失败 - {e}"
     except Exception as e:
         return f"错误: {e}"
+
 
 def run_edit_file(path: str, old_text: str, new_text: str) -> str:
     try:
@@ -78,6 +75,7 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
     except Exception as e:
         return f"错误: {e}"
 
+
 def run_glob(pattern: str) -> str:
     try:
         matches = []
@@ -87,6 +85,7 @@ def run_glob(pattern: str) -> str:
         return "\n".join(matches) if matches else "(无匹配)"
     except Exception as e:
         return f"错误: {e}"
+
 
 TOOLS = [
     {"type": "function", "function": {"name": "bash", "description": "在终端中执行一个 shell 命令。",

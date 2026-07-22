@@ -1,12 +1,8 @@
 """s13 main.py — 后台任务执行"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+import json, os
 
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
@@ -16,9 +12,8 @@ from memory import select_relevant_memories, extract_memories, consolidate_memor
 from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
 from tasks import create_task, list_tasks, get_task, claim_task, complete_task
-from background import should_run_background, start_background_task, collect_background_results  # s13
+from background import should_run_background, start_background_task, collect_background_results
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -31,7 +26,6 @@ TOOL_HANDLERS["complete_task"] = lambda task_id: complete_task(task_id)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
 
-# s13: 覆写 bash 处理器以支持后台执行
 _orig_bash = TOOL_HANDLERS["bash"]
 TOOL_HANDLERS["bash"] = lambda command: start_background_task(command) if should_run_background(command) else _orig_bash(command)
 
@@ -44,7 +38,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
         messages = run_compaction_pipeline(messages, call_llm)
 
-        # s13: 收集后台任务结果并注入到对话
         bg_notifications = collect_background_results()
         for bg_msg in bg_notifications:
             print(f"\033[35m[后台完成]\033[0m {bg_msg[:100]}...")
@@ -56,10 +49,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
         system_prompt = get_system_prompt(context)
 
-        # s11: LLM 调用已内置错误恢复
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
 
-        # s11: prompt_too_long → reactive compact 后重试
         if response.get("error") == "prompt_too_long" and not has_compacted:
             print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
             messages = reactive_compact(messages, call_llm)
@@ -67,7 +58,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             continue
 
         if response.get("error") and not response.get("content"):
-            # 不可恢复的错误
             print(f"\n\033[31m[错误] 不可恢复: {response.get('error')}\033[0m")
             return
 
@@ -109,8 +99,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
 
 def main():
     print("=" * 50)
-    print("  s11: Error Recovery — 三种错误恢复路径")
-    print("  指数退避重试 + max_tokens升级 + 熔断器")
+    print("  s13: Background Tasks — 后台任务执行")
+    print("  daemon线程 + 结果收集 + 对话注入")
     print("=" * 50)
     print("输入需求后回车。q / exit 退出。\n")
     reset_recovery()

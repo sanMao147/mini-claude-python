@@ -14,7 +14,7 @@
   更换 LLM 提供方只需修改项目根目录 .env 中的 API_KEY / API_URL / MODEL。
 
   支持的提供方示例：
-    - DeepSeek (默认):  API_URL = "https://api.deepseek.com/v1"
+    - DeepSeek (默认):  API_URL = "https://api.deepseek.com"
     - OpenAI:           API_URL = "https://api.openai.com/v1"
     - 通义千问:         API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     - 智谱 GLM:         API_URL = "https://open.bigmodel.cn/api/paas/v4"
@@ -47,7 +47,7 @@ load_dotenv(os.path.join(WORKSPACE_DIR, ".env"), override=False)
 API_KEY = os.getenv("API_KEY", "")
 
 # API 端点地址（OpenAI 兼容接口）
-API_URL = os.getenv("API_URL", "https://api.deepseek.com/v1")
+API_URL = os.getenv("API_URL", "https://api.deepseek.com")
 
 # 模型名称
 MODEL = os.getenv("MODEL", "deepseek-chat")

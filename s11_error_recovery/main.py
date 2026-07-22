@@ -1,12 +1,8 @@
 """s11 main.py — 错误恢复系统"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+import json, os
 
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
@@ -16,7 +12,6 @@ from memory import select_relevant_memories, extract_memories, consolidate_memor
 from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -27,7 +22,7 @@ for name in ["bash","read_file","write_file","edit_file","glob"]:
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
-    has_compacted = False  # 是否已执行过 reactive compact
+    has_compacted = False
     while True:
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
@@ -39,10 +34,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
         system_prompt = get_system_prompt(context)
 
-        # s11: LLM 调用已内置错误恢复
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
 
-        # s11: prompt_too_long → reactive compact 后重试
         if response.get("error") == "prompt_too_long" and not has_compacted:
             print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
             messages = reactive_compact(messages, call_llm)
@@ -50,7 +43,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             continue
 
         if response.get("error") and not response.get("content"):
-            # 不可恢复的错误
             print(f"\n\033[31m[错误] 不可恢复: {response.get('error')}\033[0m")
             return
 

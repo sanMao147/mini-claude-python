@@ -20,7 +20,7 @@
 
 import os, json, hashlib, time
 from pathlib import Path
-from config import WORKSPACE_DIR, TASK_OUTPUT_DIR
+from tools import WORKSPACE_DIR, TASK_OUTPUT_DIR
 
 # 连续压缩失败计数器（熔断器）。
 # 只有 LLM 摘要类压缩可能失败；普通裁剪是本地确定性操作，不需要计入失败。

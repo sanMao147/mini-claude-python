@@ -14,7 +14,7 @@
 """
 
 import threading, time, json, os
-from config import SCHEDULED_TASKS_FILE
+from tools import SCHEDULED_TASKS_FILE
 
 # 调度队列。
 # scheduler 线程只负责把到点任务放进 cron_queue，真正注入对话由 main.py 的 agent_loop 完成。

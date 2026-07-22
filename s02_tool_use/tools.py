@@ -1,58 +1,19 @@
-"""
-============================================================================
-  s02_tool_use/tools.py — 工具定义与执行（5 个工具）
-============================================================================
-  相比 s01，s02 新增了 4 个文件操作工具：
-    - read_file  : 读取文件内容
-    - write_file : 写入文件内容
-    - edit_file  : 替换文件中的精确文本
-    - glob       : 通配符查找文件
+"""工具定义与执行（5 个工具 + safe_path 路径校验）"""
 
-  新增 safe_path() 路径安全校验：
-    - 确保所有文件操作都在 WORKSPACE_DIR 内进行
-    - 防止路径遍历攻击（如 ../../etc/passwd）
-
-  TOOL_HANDLERS 字典取代了 s01 中硬编码的工具调用方式，
-  实现「工具名 → 处理函数」的查表分发。
-============================================================================
-"""
-
-import os
 import subprocess
 import glob as glob_module
 from pathlib import Path
-from config import WORKSPACE_DIR, DANGEROUS_COMMANDS, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE, DANGEROUS_COMMANDS
 
-# ============================================================================
-# 路径安全校验 — s02 新增
-# ============================================================================
 
 def safe_path(relative_path: str) -> Path:
-    """
-    将相对路径解析为绝对路径，并确保路径在 WORKSPACE_DIR 之内。
-
-    为什么需要这个？
-      - 防止 Agent 读取/写入工作区外的文件（如 ~/.ssh/id_rsa）
-      - 防止..路径遍历攻击（如 ../../../etc/passwd）
-      - 所有文件操作都必须经过此函数校验
-    """
-    # resolve() 会解析 .. 和符号链接，得到真正的绝对路径
     absolute = (Path(WORKSPACE_DIR) / relative_path).resolve()
-    # is_relative_to() 确保路径是工作区的子目录或文件
     if not absolute.is_relative_to(WORKSPACE_DIR):
         raise ValueError(f"路径越界！拒绝访问工作区外的路径: {relative_path}")
     return absolute
 
 
-# ============================================================================
-# 工具执行函数
-# ============================================================================
-
 def run_bash(command: str) -> str:
-    """
-    执行 shell 命令（与 s01 相同）。
-    危险命令会被拒绝，命令超时 120 秒。
-    """
     cmd_lower = command.lower()
     for dangerous in DANGEROUS_COMMANDS:
         if dangerous.lower() in cmd_lower:
@@ -76,15 +37,7 @@ def run_bash(command: str) -> str:
         return f"错误: {e}"
 
 
-# ── s02 新增的工具 ──────────────────────────────────────
-
 def run_read_file(path: str, limit: int | None = None) -> str:
-    """
-    读取文件内容。
-    - path: 文件路径（相对于工作区）
-    - limit: 最大行数（可选，用于大文件预览）
-    输出截断至 MAX_FILE_SIZE (50KB)。
-    """
     try:
         file_path = safe_path(path)
         text = file_path.read_text(encoding="utf-8", errors="replace")
@@ -103,12 +56,6 @@ def run_read_file(path: str, limit: int | None = None) -> str:
 
 
 def run_write_file(path: str, content: str) -> str:
-    """
-    写入（或覆盖）文件。
-    - path: 文件路径（相对于工作区）
-    - content: 要写入的内容
-    会自动创建父目录。
-    """
     try:
         file_path = safe_path(path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,12 +68,6 @@ def run_write_file(path: str, content: str) -> str:
 
 
 def run_edit_file(path: str, old_text: str, new_text: str) -> str:
-    """
-    在文件中精确替换一段文本（仅替换第一次出现）。
-    - path: 文件路径
-    - old_text: 要替换的原文本（必须精确匹配）
-    - new_text: 替换后的新文本
-    """
     try:
         file_path = safe_path(path)
         text = file_path.read_text(encoding="utf-8")
@@ -144,14 +85,9 @@ def run_edit_file(path: str, old_text: str, new_text: str) -> str:
 
 
 def run_glob(pattern: str) -> str:
-    """
-    使用通配符查找工作区中的文件。
-    - pattern: glob 模式，如 "*.py"、"**/*.md"、"s01*/**"
-    """
     try:
         matches = []
         for match in glob_module.glob(pattern, root_dir=WORKSPACE_DIR, recursive=True):
-            # 双重校验：确保匹配结果也在工作区内
             if (Path(WORKSPACE_DIR) / match).resolve().is_relative_to(WORKSPACE_DIR):
                 matches.append(match)
         return "\n".join(matches) if matches else "(无匹配)"
@@ -159,12 +95,7 @@ def run_glob(pattern: str) -> str:
         return f"错误: {e}"
 
 
-# ============================================================================
-# 工具定义 — OpenAI Function Calling 格式（5 个工具）
-# ============================================================================
-
 TOOLS = [
-    # ── bash: 执行 shell 命令 ──
     {
         "type": "function",
         "function": {
@@ -177,7 +108,6 @@ TOOLS = [
             },
         },
     },
-    # ── read_file: 读取文件 ──
     {
         "type": "function",
         "function": {
@@ -193,7 +123,6 @@ TOOLS = [
             },
         },
     },
-    # ── write_file: 写入文件 ──
     {
         "type": "function",
         "function": {
@@ -209,7 +138,6 @@ TOOLS = [
             },
         },
     },
-    # ── edit_file: 编辑文件 ──
     {
         "type": "function",
         "function": {
@@ -226,7 +154,6 @@ TOOLS = [
             },
         },
     },
-    # ── glob: 查找文件 ──
     {
         "type": "function",
         "function": {
@@ -241,11 +168,6 @@ TOOLS = [
     },
 ]
 
-# ============================================================================
-# 工具分发映射 — 工具名 → 处理函数
-# ============================================================================
-# s02 的核心改进：从 s01 的「硬编码 run_bash」变为「查表分发」
-# 以后新增工具只需：1) 定义 TOOLS 条目 2) 在 TOOL_HANDLERS 中注册
 TOOL_HANDLERS = {
     "bash": lambda command: run_bash(command),
     "read_file": lambda path, limit=None: run_read_file(path, limit),

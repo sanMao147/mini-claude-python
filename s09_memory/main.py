@@ -1,20 +1,16 @@
 """s09 main.py — 持久化记忆系统"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
-from config import WORKSPACE_DIR, MEMORY_DIR
+import json, os
+
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
 from skills import build_skills_catalog, load_skill
 from compact import run_compaction_pipeline, run_compact, reactive_compact
-from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
+from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir, MEMORY_DIR
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
@@ -26,11 +22,9 @@ _skills_catalog = build_skills_catalog()
 os.makedirs(MEMORY_DIR, exist_ok=True)
 
 def _build_system_prompt(query: str = "") -> str:
-    """动态组装系统提示词，包含相关记忆。"""
     parts = [f"你是一个编程助手 Agent，工作目录为 {WORKSPACE_DIR}。",
              "可用工具: bash, read_file, write_file, edit_file, glob, todo_write, task, load_skill, compact"]
     if _skills_catalog: parts.append(_skills_catalog)
-    # 注入相关记忆
     if query:
         mems = select_relevant_memories(query, call_llm)
         if mems:
@@ -47,10 +41,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=_build_system_prompt(user_query))
         messages.append(response["assistant_message"])
         if response["finish_reason"] != "tool_calls":
-            # s09: 自动提取记忆
             extracted = extract_memories(messages, call_llm)
             if extracted: print(f"\033[90m[记忆] {extracted}\033[0m")
-            # 检查是否需要整理
             all_mems = _scan_memory_dir()
             if len(all_mems) >= 10:
                 result = consolidate_memories(call_llm)

@@ -28,7 +28,7 @@
 import os, yaml
 from pathlib import Path
 
-from config import WORKSPACE_DIR
+from tools import WORKSPACE_DIR
 
 # 技能文件目录。
 # 只扫描工作区内的 skills/，不接受用户直接传路径，避免任意文件读取。

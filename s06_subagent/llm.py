@@ -1,10 +1,7 @@
-"""
-============================================================================
-  s06_subagent/llm.py — LLM API 调用封装
-============================================================================
-"""
+"""LLM API 调用封装"""
 
 from openai import OpenAI
+
 from config import API_KEY, API_URL, MODEL, MAX_TOKENS, TEMPERATURE
 
 _client = OpenAI(api_key=API_KEY, base_url=API_URL)

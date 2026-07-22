@@ -1,9 +1,11 @@
-"""s13 tasks.py — 任务DAG系统（从s12复制）"""
+"""s13 tasks.py — 任务DAG系统"""
 import os, json, uuid
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
+
 from config import TASKS_DIR
 os.makedirs(TASKS_DIR, exist_ok=True)
+
 @dataclass
 class Task:
     id: str; subject: str; description: str = ""; status: str = "pending"
@@ -11,6 +13,7 @@ class Task:
     def to_dict(self): return asdict(self)
     @classmethod
     def from_dict(cls, d): return cls(**d)
+
 def _task_path(tid): return os.path.join(TASKS_DIR, f"{tid}.json")
 def save_task(t): Path(_task_path(t.id)).write_text(json.dumps(t.to_dict(),ensure_ascii=False,indent=2),encoding="utf-8")
 def load_task(tid):

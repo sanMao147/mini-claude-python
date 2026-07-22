@@ -17,7 +17,7 @@
 """
 
 import json, os
-from config import WORKSPACE_DIR, MEMORY_DIR
+from tools import WORKSPACE_DIR, MEMORY_DIR
 from skills import build_skills_catalog
 from memory import _scan_memory_dir
 

@@ -1,20 +1,14 @@
 """s12 tools.py — 14 个工具（新增 5 个任务管理工具）"""
-import os, subprocess, glob as g_mod
+import subprocess, glob as g_mod
 from pathlib import Path
-from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
 
-# 本模块分成两层：
-# 1. run_* 函数是真正执行工具逻辑的 Python 实现。
-# 2. TOOLS 是暴露给 LLM 的 JSON schema，TOOL_HANDLERS 负责把工具名映射回 run_*。
+from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE, DANGEROUS_COMMANDS, TASK_OUTPUT_DIR, TASKS_DIR, MEMORY_DIR, SCHEDULED_TASKS_FILE, MAILBOXES_DIR
 
 def safe_path(p):
-    """把用户传入路径限制在 WORKSPACE_DIR 内，防止工具读写工作区之外的文件。"""
     a=(Path(WORKSPACE_DIR)/p).resolve()
     if not a.is_relative_to(WORKSPACE_DIR): raise ValueError(f"路径越界！{p}")
     return a
-
 def run_bash(c):
-    """执行 shell 命令，并统一做超时、编码容错和输出截断。"""
     try:
         r=subprocess.run(c,shell=True,cwd=WORKSPACE_DIR,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=120)
         o=(r.stdout+r.stderr).strip()
@@ -23,9 +17,7 @@ def run_bash(c):
         return o
     except subprocess.TimeoutExpired: return "错误:超时(120s)"
     except Exception as e: return f"错误:{e}"
-
 def run_read(p,l=None):
-    """读取工作区内文件；limit 只截取前 l 行，文件过大时再按 MAX_FILE_SIZE 截断。"""
     try:
         fp=safe_path(p);t=fp.read_text(encoding="utf-8",errors="replace")
         if len(t)>MAX_FILE_SIZE: t=t[:MAX_FILE_SIZE]+"\n...(截断)"
@@ -35,15 +27,11 @@ def run_read(p,l=None):
     except ValueError as e: return f"错误:路径校验失败-{e}"
     except FileNotFoundError: return f"错误:文件不存在-{p}"
     except Exception as e: return f"错误:{e}"
-
 def run_write(p,c):
-    """写入工作区内文件，必要时自动创建父目录。"""
     try: fp=safe_path(p);fp.parent.mkdir(parents=True,exist_ok=True);fp.write_text(c,encoding="utf-8");return f"已写入{len(c)}字节到{p}"
     except ValueError as e: return f"错误:路径校验失败-{e}"
     except Exception as e: return f"错误:{e}"
-
 def run_edit(p,ot,nt):
-    """对文件做一次精确文本替换；找不到 old_text 时拒绝修改。"""
     try:
         fp=safe_path(p);t=fp.read_text(encoding="utf-8")
         if ot not in t: return f"错误:未找到指定文本"
@@ -51,9 +39,7 @@ def run_edit(p,ot,nt):
     except ValueError as e: return f"错误:路径校验失败-{e}"
     except FileNotFoundError: return f"错误:文件不存在-{p}"
     except Exception as e: return f"错误:{e}"
-
 def run_glob(pt):
-    """按 glob 模式查找工作区内文件，并过滤掉解析后越界的路径。"""
     try:
         ms=[]
         for m in g_mod.glob(pt,root_dir=WORKSPACE_DIR,recursive=True):
@@ -61,7 +47,6 @@ def run_glob(pt):
         return "\n".join(ms) if ms else "(无匹配)"
     except Exception as e: return f"错误:{e}"
 
-# 暴露给模型的工具定义。description 和 parameters 会直接影响模型如何构造 tool_call。
 TOOLS = [
     {"type":"function","function":{"name":"bash","description":"执行shell命令","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}},
     {"type":"function","function":{"name":"read_file","description":"读取文件","parameters":{"type":"object","properties":{"path":{"type":"string"},"limit":{"type":"integer"}},"required":["path"]}}},
@@ -72,7 +57,6 @@ TOOLS = [
     {"type":"function","function":{"name":"task","description":"委托给子Agent","parameters":{"type":"object","properties":{"prompt":{"type":"string"},"cwd":{"type":"string"}},"required":["prompt"]}}},
     {"type":"function","function":{"name":"load_skill","description":"加载技能","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}},
     {"type":"function","function":{"name":"compact","description":"压缩上下文","parameters":{"type":"object","properties":{},"required":[]}}},
-    # s12: 5个任务管理工具，用于跨轮次维护更结构化的任务状态。
     {"type":"function","function":{"name":"create_task","description":"创建新任务，可声明blockedBy依赖",
         "parameters":{"type":"object","properties":{"subject":{"type":"string"},"description":{"type":"string"},"blocked_by":{"type":"array","items":{"type":"string"}}},"required":["subject"]}}},
     {"type":"function","function":{"name":"list_tasks","description":"列出所有任务，可按状态过滤",
@@ -83,16 +67,14 @@ TOOLS = [
         "parameters":{"type":"object","properties":{"task_id":{"type":"string"}},"required":["task_id"]}}},
     {"type":"function","function":{"name":"complete_task","description":"完成任务(in_progress→completed)",
         "parameters":{"type":"object","properties":{"task_id":{"type":"string"}},"required":["task_id"]}}},
-    # s14: cron 调度工具，允许模型把未来要执行的 prompt 注册为定时任务。
     {"type":"function","function":{"name":"schedule_job","description":"注册定时任务(cron表达式)。格式: 分 时 日 月 星期。例: */5 * * * * 每5分钟",
         "parameters":{"type":"object","properties":{"cron":{"type":"string"},"prompt":{"type":"string"},"durable":{"type":"boolean"}},"required":["cron","prompt"]}}},
 ]
 
 TOOL_HANDLERS = {
-    # 内置基础工具在本文件直接绑定；依赖运行时对象的工具由 main.py 注入。
     "bash":lambda c:run_bash(c),"read_file":lambda p,l=None:run_read(p,l),"write_file":lambda p,c:run_write(p,c),
     "edit_file":lambda p,o,n:run_edit(p,o,n),"glob":lambda p:run_glob(p),
     "todo_write":None,"task":None,"load_skill":None,"compact":None,
     "create_task":None,"list_tasks":None,"get_task":None,"claim_task":None,"complete_task":None,
-    "schedule_job":None,  # s14 新增
+    "schedule_job":None,
 }

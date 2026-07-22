@@ -2,33 +2,23 @@
 ============================================================================
   s14_cron_scheduler/cron.py — Cron 定时调度系统
 ============================================================================
-  四层模型：
-  1. Scheduler — daemon 线程每秒轮询，cron_matches() 做五段式匹配
-  2. Queue — cron_queue，调度线程写入
-  3. Queue Processor — queue_processor_loop() 在 Agent 空闲时交付
-  4. Consumer — agent_loop 从队列消费并注入
-
-  Cron 支持: 分钟 小时 日 月 星期 (* 匹配全部)
-  Durable job 持久化到 .scheduled_tasks.json
-============================================================================
 """
 
 import threading, time, json, os
+
 from config import SCHEDULED_TASKS_FILE
 
-# 调度队列
 cron_queue: list[dict] = []
 cron_lock = threading.Lock()
-agent_lock = threading.Lock()  # 判断 Agent 是否空闲
+agent_lock = threading.Lock()
 
-# 日期感知标记（防止同一分钟重复触发）
 _last_marker = ""
 
 
 class CronJob:
     def __init__(self, job_id: str, cron: str, prompt: str, durable: bool = False):
         self.job_id = job_id
-        self.cron = cron    # "*/5 * * * *" 格式
+        self.cron = cron
         self.prompt = prompt
         self.durable = durable
         self.last_run: str | None = None
@@ -41,12 +31,10 @@ class CronJob:
         return j
 
 
-# 注册的定时任务
 _cron_jobs: dict[str, CronJob] = {}
 
 
 def cron_matches(cron_expr: str, dt=None) -> bool:
-    """五段式 cron 匹配（分钟/小时/日/月/星期）。DOM和DOW同时约束时OR语义。"""
     if dt is None:
         dt = time.localtime()
     parts = cron_expr.strip().split()
@@ -54,11 +42,11 @@ def cron_matches(cron_expr: str, dt=None) -> bool:
         return False
 
     fields = [
-        (dt.tm_min, 0, 59),      # 分钟
-        (dt.tm_hour, 0, 23),     # 小时
-        (dt.tm_mday, 1, 31),     # 日
-        (dt.tm_mon, 1, 12),      # 月
-        ((dt.tm_wday + 1) % 7, 0, 6),  # 星期 (0=周日)
+        (dt.tm_min, 0, 59),
+        (dt.tm_hour, 0, 23),
+        (dt.tm_mday, 1, 31),
+        (dt.tm_mon, 1, 12),
+        ((dt.tm_wday + 1) % 7, 0, 6),
     ]
 
     for i, (val, lo, hi) in enumerate(fields):
@@ -85,7 +73,6 @@ def cron_matches(cron_expr: str, dt=None) -> bool:
 
 
 def schedule_job(cron: str, prompt: str, durable: bool = False) -> str:
-    """注册一个定时任务。返回 job_id。"""
     import uuid
     job_id = f"cron_{uuid.uuid4().hex[:8]}"
     job = CronJob(job_id, cron, prompt, durable)
@@ -95,7 +82,6 @@ def schedule_job(cron: str, prompt: str, durable: bool = False) -> str:
 
 
 def _load_durable_jobs():
-    """从持久化文件加载定时任务。"""
     if not os.path.exists(SCHEDULED_TASKS_FILE):
         return
     try:
@@ -108,14 +94,12 @@ def _load_durable_jobs():
 
 
 def _save_durable_jobs():
-    """持久化 durable 类型的定时任务。"""
     durable = [j.to_dict() for j in _cron_jobs.values() if j.durable]
     with open(SCHEDULED_TASKS_FILE, "w", encoding="utf-8") as f:
         json.dump(durable, f, ensure_ascii=False, indent=2)
 
 
 def cron_scheduler_loop():
-    """Daemon 线程：每秒轮询，匹配的 cron 任务写入队列。"""
     global _last_marker
     _load_durable_jobs()
 
@@ -135,7 +119,6 @@ def cron_scheduler_loop():
 
 
 def queue_processor_loop():
-    """在 Agent 空闲时从队列交付出任务。"""
     while True:
         if cron_queue and agent_lock.acquire(blocking=False):
             try:
@@ -148,7 +131,6 @@ def queue_processor_loop():
         time.sleep(0.5)
 
 
-# 启动 cron scheduler（在 main.py 中调用）
 _cron_thread_started = False
 
 

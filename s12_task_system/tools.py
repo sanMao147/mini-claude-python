@@ -1,7 +1,9 @@
 """s12 tools.py — 14 个工具（新增 5 个任务管理工具）"""
-import os, subprocess, glob as g_mod
+import subprocess, glob as g_mod
 from pathlib import Path
+
 from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+
 def safe_path(p):
     a=(Path(WORKSPACE_DIR)/p).resolve()
     if not a.is_relative_to(WORKSPACE_DIR): raise ValueError(f"路径越界！{p}")
@@ -55,7 +57,6 @@ TOOLS = [
     {"type":"function","function":{"name":"task","description":"委托给子Agent","parameters":{"type":"object","properties":{"prompt":{"type":"string"},"cwd":{"type":"string"}},"required":["prompt"]}}},
     {"type":"function","function":{"name":"load_skill","description":"加载技能","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}},
     {"type":"function","function":{"name":"compact","description":"压缩上下文","parameters":{"type":"object","properties":{},"required":[]}}},
-    # s12: 5个任务管理工具
     {"type":"function","function":{"name":"create_task","description":"创建新任务，可声明blockedBy依赖",
         "parameters":{"type":"object","properties":{"subject":{"type":"string"},"description":{"type":"string"},"blocked_by":{"type":"array","items":{"type":"string"}}},"required":["subject"]}}},
     {"type":"function","function":{"name":"list_tasks","description":"列出所有任务，可按状态过滤",

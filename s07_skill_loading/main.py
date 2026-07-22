@@ -1,25 +1,20 @@
 """s07 main.py — 技能加载系统"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
-from config import WORKSPACE_DIR
+import json
+
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
-from skills import build_skills_catalog, load_skill  # s07 新增
+from skills import build_skills_catalog, load_skill
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
 for name in ["bash","read_file","write_file","edit_file","glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
 
-# System Prompt — s07: 加入技能目录
 _skills_catalog = build_skills_catalog()
 SYSTEM_PROMPT = (
     f"你是一个编程助手 Agent，工作目录为 {WORKSPACE_DIR}。\n"

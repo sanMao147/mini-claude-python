@@ -18,7 +18,7 @@
 
 import json, os
 
-from config import WORKSPACE_DIR
+from tools import WORKSPACE_DIR
 from llm import call_llm
 from hooks import trigger_hooks
 

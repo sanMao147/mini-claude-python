@@ -20,7 +20,7 @@
 
 import os, json, hashlib, time
 from pathlib import Path
-from config import WORKSPACE_DIR, TASK_OUTPUT_DIR
+from tools import WORKSPACE_DIR, TASK_OUTPUT_DIR
 
 # 连续压缩失败计数器（熔断器）
 _consecutive_failures = 0

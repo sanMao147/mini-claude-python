@@ -1,12 +1,8 @@
 """s12 main.py — 持久化任务系统 + DAG 依赖图"""
-import json, os, sys
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+import json, os
 
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
@@ -15,14 +11,12 @@ from compact import run_compaction_pipeline, run_compact, reactive_compact
 from memory import select_relevant_memories, extract_memories, consolidate_memories, _scan_memory_dir
 from prompt import get_system_prompt, update_context
 from recovery import _state, reset_state as reset_recovery
-from tasks import create_task, list_tasks, get_task, claim_task, complete_task  # s12
+from tasks import create_task, list_tasks, get_task, claim_task, complete_task
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
 TOOL_HANDLERS["load_skill"] = lambda name: load_skill(name)
 TOOL_HANDLERS["compact"] = lambda: run_compact(call_llm)
-# s12: 任务管理工具
 TOOL_HANDLERS["create_task"] = lambda subject, description="", blocked_by=None: create_task(subject, description, blocked_by)
 TOOL_HANDLERS["list_tasks"] = lambda status=None: list_tasks(status)
 TOOL_HANDLERS["get_task"] = lambda task_id: get_task(task_id)
@@ -34,7 +28,7 @@ for name in ["bash","read_file","write_file","edit_file","glob"]:
 _all_tool_names = [t["function"]["name"] for t in TOOLS]
 
 def agent_loop(messages: list[dict], user_query: str = ""):
-    has_compacted = False  # 是否已执行过 reactive compact
+    has_compacted = False
     while True:
         nag = check_nag_reminder()
         if nag: print(f"\033[33m{nag}\033[0m"); messages.append({"role": "user", "content": nag})
@@ -46,10 +40,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             context["memory_summaries"] = [f"{m.get('name','')}: {m.get('description','')}" for m in rel_mems[:5]]
         system_prompt = get_system_prompt(context)
 
-        # s11: LLM 调用已内置错误恢复
         response = call_llm(messages=messages, tools=TOOLS, system_prompt=system_prompt)
 
-        # s11: prompt_too_long → reactive compact 后重试
         if response.get("error") == "prompt_too_long" and not has_compacted:
             print(f"\033[33m[恢复] prompt_too_long → 执行应急压缩\033[0m")
             messages = reactive_compact(messages, call_llm)
@@ -57,7 +49,6 @@ def agent_loop(messages: list[dict], user_query: str = ""):
             continue
 
         if response.get("error") and not response.get("content"):
-            # 不可恢复的错误
             print(f"\n\033[31m[错误] 不可恢复: {response.get('error')}\033[0m")
             return
 
@@ -99,8 +90,8 @@ def agent_loop(messages: list[dict], user_query: str = ""):
 
 def main():
     print("=" * 50)
-    print("  s11: Error Recovery — 三种错误恢复路径")
-    print("  指数退避重试 + max_tokens升级 + 熔断器")
+    print("  s12: Task System — 持久化任务系统 + DAG 依赖图")
+    print("  create_task/list_tasks/get_task/claim_task/complete_task")
     print("=" * 50)
     print("输入需求后回车。q / exit 退出。\n")
     reset_recovery()

@@ -1,7 +1,9 @@
 """s12 tools.py — 14 个工具（新增 5 个任务管理工具）"""
-import os, subprocess, glob as g_mod
+import subprocess, glob as g_mod
 from pathlib import Path
+
 from config import WORKSPACE_DIR, MAX_TOOL_OUTPUT, MAX_FILE_SIZE
+
 def safe_path(p):
     a=(Path(WORKSPACE_DIR)/p).resolve()
     if not a.is_relative_to(WORKSPACE_DIR): raise ValueError(f"路径越界！{p}")
@@ -55,7 +57,6 @@ TOOLS = [
     {"type":"function","function":{"name":"task","description":"委托给子Agent","parameters":{"type":"object","properties":{"prompt":{"type":"string"},"cwd":{"type":"string"}},"required":["prompt"]}}},
     {"type":"function","function":{"name":"load_skill","description":"加载技能","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}},
     {"type":"function","function":{"name":"compact","description":"压缩上下文","parameters":{"type":"object","properties":{},"required":[]}}},
-    # s12: 5个任务管理工具
     {"type":"function","function":{"name":"create_task","description":"创建新任务，可声明blockedBy依赖",
         "parameters":{"type":"object","properties":{"subject":{"type":"string"},"description":{"type":"string"},"blocked_by":{"type":"array","items":{"type":"string"}}},"required":["subject"]}}},
     {"type":"function","function":{"name":"list_tasks","description":"列出所有任务，可按状态过滤",
@@ -66,7 +67,6 @@ TOOLS = [
         "parameters":{"type":"object","properties":{"task_id":{"type":"string"}},"required":["task_id"]}}},
     {"type":"function","function":{"name":"complete_task","description":"完成任务(in_progress→completed)",
         "parameters":{"type":"object","properties":{"task_id":{"type":"string"}},"required":["task_id"]}}},
-    # s14: cron 调度工具
     {"type":"function","function":{"name":"schedule_job","description":"注册定时任务(cron表达式)。格式: 分 时 日 月 星期。例: */5 * * * * 每5分钟",
         "parameters":{"type":"object","properties":{"cron":{"type":"string"},"prompt":{"type":"string"},"durable":{"type":"boolean"}},"required":["cron","prompt"]}}},
 ]
@@ -76,5 +76,5 @@ TOOL_HANDLERS = {
     "edit_file":lambda p,o,n:run_edit(p,o,n),"glob":lambda p:run_glob(p),
     "todo_write":None,"task":None,"load_skill":None,"compact":None,
     "create_task":None,"list_tasks":None,"get_task":None,"claim_task":None,"complete_task":None,
-    "schedule_job":None,  # s14 新增
+    "schedule_job":None,
 }

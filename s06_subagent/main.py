@@ -1,33 +1,15 @@
-"""
-============================================================================
-  s06_subagent/main.py — 子 Agent 上下文隔离
-============================================================================
-  核心改进（相比 s05）：
-  1. 新增 task 工具：创建子 Agent 解耦子任务
-  2. 子 Agent 拥有全新的 messages[]，中间过程丢弃，只返回文本摘要
-  3. 子 Agent 无 task 工具（禁止递归），最多 30 轮安全限制
+"""s06 子 Agent — 上下文隔离，大任务拆小"""
 
-  运行方式：python s06_subagent/main.py
-============================================================================
-"""
+import json
 
-import json, os, sys
-
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-
-from config import WORKSPACE_DIR
 from llm import call_llm
-from tools import TOOLS, TOOL_HANDLERS
+from tools import TOOLS, TOOL_HANDLERS, WORKSPACE_DIR
 from hooks import trigger_hooks
 from todos import run_todo_write, check_nag_reminder, increment_todo_counter, reset_todo_counter
 from subagent import spawn_subagent, SUB_HANDLERS
 
-# 注入动态处理函数
 TOOL_HANDLERS["todo_write"] = lambda todos: run_todo_write(todos)
 TOOL_HANDLERS["task"] = lambda prompt, cwd=None: spawn_subagent(prompt, cwd)
-# 子 Agent 的 5 个基础工具
 for name in ["bash", "read_file", "write_file", "edit_file", "glob"]:
     SUB_HANDLERS[name] = TOOL_HANDLERS[name]
 
